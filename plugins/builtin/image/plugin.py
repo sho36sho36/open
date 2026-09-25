@@ -7,7 +7,7 @@ class ImagePlugin(FilePlugin):
     """一般的な画像ファイルに対応する共通プラグイン。"""
 
     name = "Image Plugin"
-    version = "1.1.1"
+    version = "1.2.0"
 
     description = (
         "一般的な画像ファイルを表示する"
