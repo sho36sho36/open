@@ -11,7 +11,7 @@ from .file_info import FileInfo
 class FileFusionApplication:
     """FileFusionアプリケーション本体。"""
 
-    VERSION = "1.0.0"
+    VERSION = "1.1.0"
 
     def __init__(self):
         self.qt_app = QApplication(sys.argv)
@@ -51,7 +51,7 @@ class FileFusionApplication:
         self.window = MainWindow(self)
 
     def open_file(self, path):
-        """ファイルをFileFusionで開きます."""
+        """ファイルをFileFusionで開きます。"""
 
         file_info = FileInfo(path)
 
