@@ -9,20 +9,24 @@ from .file_info import FileInfo
 
 
 class FileFusionApplication:
-    """FileFusionアプリケーション本体。"""
+    """openアプリケーション本体。"""
 
-    VERSION = "1.2.0"
+    VERSION = "1.3.0"
 
     def __init__(self):
         self.qt_app = QApplication(sys.argv)
 
-        self.qt_app.setApplicationName("FileFusion")
-        self.qt_app.setApplicationDisplayName("FileFusion")
-        self.qt_app.setApplicationVersion(self.VERSION)
+        self.qt_app.setApplicationName("open")
+        self.qt_app.setApplicationDisplayName("open")
+        self.qt_app.setApplicationVersion(
+            self.VERSION
+        )
 
         self.detector = FileDetector()
 
-        base_directory = Path(__file__).resolve().parent.parent
+        base_directory = (
+            Path(__file__).resolve().parent.parent
+        )
 
         builtin_directory = (
             base_directory
@@ -51,11 +55,13 @@ class FileFusionApplication:
         self.window = MainWindow(self)
 
     def open_file(self, path):
-        """ファイルをFileFusionで開きます。"""
+        """ファイルをopenで開きます。"""
 
         file_info = FileInfo(path)
 
-        self.window.show_file(file_info)
+        self.window.show_file(
+            file_info
+        )
 
     def run(self):
         self.window.show()
