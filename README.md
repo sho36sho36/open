@@ -10,38 +10,15 @@
 
 ## ✨ Features
 
-- 🖥 軽量なデスクトップGUI
-- 🔌 プラグイン方式
-- 📂 拡張子による自動判定
-- 🧩 ファイル形式ごとの専用GUI
-- 🎵 MIDIファイルの再生・表示
-- 🎹 ピアノロール形式のMIDI表示
-- ⚡ 軽量なMIDI再生エンジン
-- 🚀 必要な機能だけをプラグインとして追加
-- 🛠 外部プラグインへの拡張を想定
-- 🐍 Python製
-
----
-
-## 🎵 MIDI Plugin
-
-FileFusion v1.0.1では、MIDIプラグインを追加しました。
-
-`.mid` / `.midi` ファイルを開くと、専用のMIDIビューアが表示されます。
-
-### 主な機能
-
-- 🎹 ピアノロール表示
-- 🎵 MIDI再生
-- ⏯ 再生・一時停止・停止
-- ⏩ シーク
-- 🎚 MIDI出力デバイス選択
-- 🎼 ノート・ベロシティ表示
-- ⚡ 軽量な再生処理
-- 🧵 GUIとMIDI再生を分離した非同期再生
-- 📈 再生時間に基づいた安定したタイミング制御
-
-MIDI再生中もGUIが重くなりにくいように設計しています。
+* 🖥 軽量なデスクトップGUI
+* 🔌 プラグイン方式
+* 📂 拡張子による自動判定
+* 🧩 ファイル形式ごとの専用GUI
+* 🎵 音声ファイルの再生
+* 🎹 MIDIファイルのピアノロール表示・再生
+* 🚀 必要な機能だけをプラグインとして追加
+* 🛠 外部プラグインへの拡張を想定
+* 🐍 Python製
 
 ---
 
@@ -57,117 +34,176 @@ FileFusion
 │   └─ Viewer System
 │
 ├─ UI
-│   └─ Main Window
 │
 └─ Plugins
     ├─ Built-in Plugins
-    │   ├─ Example
-    │   └─ MIDI
+    │   ├─ MIDI Plugin
+    │   └─ Audio Plugin
     │
     └─ External Plugins
 ```
+
+FileFusionでは、ファイル形式ごとの処理をプラグインとして分離しています。
 
 ---
 
 ## 🔌 Plugin System
 
-FileFusionでは、ファイル形式ごとの処理をプラグインに分離します。
+FileFusionは、拡張子に応じて対応するプラグインを自動的に選択します。
 
-例えばMIDIの場合、
+### 🎹 MIDI
+
+MIDIは通常の音声ファイルとは異なり、演奏情報を扱うため専用プラグインとして実装されています。
 
 ```text
-MIDI File
-    ↓
+MIDI
+ ↓
 MIDI Plugin
-    ↓
-MIDI Parser
-    ↓
-MIDI Viewer
-    ↓
-ピアノロール + MIDI再生
+ ↓
+MIDI解析
+ ↓
+ピアノロール
+ ↓
+MIDI再生
 ```
 
-という構造になっています。
+### 🎵 通常の音声
 
-プラグインを追加することで、FileFusion本体を大きく変更せずに新しいファイル形式へ対応できます。
+WAVやMP3などの一般的な音声形式は、共通のAudio Pluginで処理します。
+
+```text
+WAV / MP3 / M4A / ...
+        ↓
+   Audio Plugin
+        ↓
+  共通Audio Viewer
+        ↓
+ 再生・一時停止・停止
+      シーク・音量
+```
+
+この方式により、音声形式ごとに個別のプラグインを作る必要がありません。
 
 ---
 
-## 📋 対応状況
+## 🎹 MIDI Plugin
 
-### 🎵 現在対応
+現在、MIDIファイルに対応しています。
 
-#### MIDI
+### 対応拡張子
 
-- MID
-- MIDI
+* `.mid`
+* `.midi`
 
-MIDI以外のファイル形式については、今後プラグインとして追加していく予定です。
+### 主な機能
+
+* 🎹 ピアノロール表示
+* 🎵 ノート表示
+* ▶ 再生
+* ⏸ 一時停止
+* ⏹ 停止
+* ⏩ 再生位置操作
+* 🔊 MIDI出力選択
+* 🎼 鍵盤表示
+* 🚀 大きなMIDIファイルを考慮した描画最適化
 
 ---
 
-## 🗺️ 対応予定
+## 🎵 Audio Plugin
+
+一般的な音声ファイルを1つの共通プラグインで扱います。
+
+### 対応拡張子
+
+* `.wav`
+* `.mp3`
+* `.m4a`
+* `.aac`
+* `.flac`
+* `.ogg`
+* `.aiff`
+* `.aif`
+* `.au`
+
+### 主な機能
+
+* ▶ 再生
+* ⏸ 一時停止
+* ⏹ 停止
+* ⏩ シーク
+* 🔊 音量調整
+* ⏱ 再生時間表示
+* 📊 ファイル形式・サイズ表示
+
+Audio Pluginは **PySide6 Qt Multimedia** を利用して音声を再生します。
+
+---
+
+## 📋 対応予定
 
 ### Web
 
-- HTML
-- MHTML
-- CSS
-- XSL
-- Markdown
+* HTML
+* MHTML
+* CSS
+* XSL
+* Markdown
 
 ### 文書
 
-- TXT
-- DOC
-- DOCX
-- XLS
-- XLSX
-- PPT
-- PPTX
-- RTF
-- PDF
+* TXT
+* DOC
+* DOCX
+* XLS
+* XLSX
+* PPT
+* PPTX
+* RTF
+* PDF
 
 ### 画像
 
-- BMP
-- GIF
-- ICO
-- JPG
-- PNG
-- TIFF
-- WebP
+* BMP
+* GIF
+* ICO
+* JPG
+* PNG
+* TIFF
+* WebP
 
 ### 音声
 
-- AAC
-- AIFF
-- AU
-- M4A
-- MP3
-- WAV
-- WMA
+* AAC
+* AIFF
+* AU
+* M4A
+* MIDI
+* MP3
+* WAV
+* WMA
+* FLAC
+* OGG
 
 ### 動画
 
-- 3GP
-- AVI
-- FLV
-- MOV
-- MPEG
-- MP4
-- WebM
-- WMV
+* 3GP
+* AVI
+* FLV
+* MOV
+* MPEG
+* MP4
+* WebM
+* WMV
 
 ### アーカイブ
 
-- 7Z
-- BZ2
-- GZ
-- LZH
-- RAR
-- TAR
-- ZIP
+* 7Z
+* BZ2
+* GZ
+* LZH
+* RAR
+* TAR
+* ZIP
 
 ### その他
 
@@ -175,33 +211,98 @@ MIDI以外のファイル形式については、今後プラグインとして�
 
 ---
 
-## 🚧 Version 1.0.1
+## 🏗 Project Structure
 
-v1.0.1では、FileFusionのプラグイン基盤にMIDI対応を追加しました。
+```text
+open/
+├─ main.py
+├─ requirements.txt
+├─ README.md
+│
+├─ core/
+│  ├─ application.py
+│  ├─ plugin.py
+│  ├─ plugin_manager.py
+│  ├─ file_info.py
+│  ├─ file_detector.py
+│  ├─ viewer.py
+│  └─ exceptions.py
+│
+├─ ui/
+│  ├─ main_window.py
+│  └─ widgets/
+│
+├─ plugins/
+│  ├─ builtin/
+│  │  ├─ example/
+│  │  ├─ midi/
+│  │  │  ├─ plugin.py
+│  │  │  ├─ midi_parser.py
+│  │  │  ├─ midi_player.py
+│  │  │  └─ midi_viewer.py
+│  │  │
+│  │  └─ audio/
+│  │     ├─ plugin.py
+│  │     └─ audio_viewer.py
+│  │
+│  └─ external/
+│
+├─ tests/
+│
+└─ docs/
+   └─ PLUGIN.md
+```
 
-### v1.0.0
+---
 
-- Core
-- Plugin Manager
-- Plugin API
-- File Detector
-- Viewer基盤
-- GUI
-- サンプルPlugin
-- テスト
+## 🛠️ Technologies
+
+FileFusionは以下の技術を使用しています。
+
+* Python
+* PySide6
+* Qt Multimedia
+* Mido
+* python-rtmidi
+
+---
+
+## 🚧 Version History
+
+### v1.1.0
+
+**Audio Plugin追加**
+
+* 共通Audio Pluginを追加
+* WAV / MP3などの音声ファイルに対応
+* 再生・一時停止・停止
+* シーク
+* 音量調整
+* 再生時間表示
+* Qt Multimediaによる音声再生
 
 ### v1.0.1
 
-- MIDI Plugin
-- MIDI Parser
-- MIDI Player
-- MIDI Viewer
-- ピアノロール表示
-- MIDI再生
-- MIDI出力デバイス選択
-- シーク・一時停止・停止
-- 再生処理の軽量化
-- 再生タイミングの安定化
+**MIDI Plugin追加**
+
+* MIDIファイル対応
+* MIDI解析
+* ピアノロール表示
+* MIDI再生
+* MIDI出力選択
+
+### v1.0.0
+
+**Initial Release**
+
+* Core
+* Plugin Manager
+* Plugin API
+* File Detector
+* Viewer基盤
+* GUI
+* サンプルPlugin
+* テスト
 
 ---
 
@@ -231,56 +332,11 @@ python -m pytest
 
 ## 🧩 Plugin Development
 
-FileFusionでは、外部プラグインを追加できる構造を目指しています。
-
-プラグインの開発方法については、
+プラグイン開発については、
 
 `docs/PLUGIN.md`
 
 を参照してください。
-
----
-
-## 📁 Project Structure
-
-```text
-open/
-├─ main.py
-├─ requirements.txt
-├─ README.md
-│
-├─ core/
-│   ├─ application.py
-│   ├─ plugin.py
-│   ├─ plugin_manager.py
-│   ├─ file_info.py
-│   ├─ file_detector.py
-│   ├─ viewer.py
-│   └─ exceptions.py
-│
-├─ ui/
-│   ├─ main_window.py
-│   └─ widgets/
-│
-├─ plugins/
-│   └─ builtin/
-│       ├─ example/
-│       └─ midi/
-│
-├─ tests/
-│
-└─ docs/
-    └─ PLUGIN.md
-```
-
----
-
-## 🛠️ Technology
-
-- Python
-- PySide6
-- Mido
-- python-rtmidi
 
 ---
 
