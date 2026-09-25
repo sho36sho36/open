@@ -2,14 +2,15 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QMainWindow,
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QPushButton,
-    QLabel,
     QFileDialog,
-    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
 )
 
 from core.viewer import UnsupportedViewer
@@ -18,220 +19,411 @@ from core.viewer import UnsupportedViewer
 class MainWindow(QMainWindow):
     """FileFusionのメインウィンドウ。"""
 
-    def __init__(self, application):
-        super().__init__()
+    def __init__(
+        self,
+        application,
+        parent=None,
+    ):
+        super().__init__(parent)
 
+        # FileFusionApplication本体
         self.application = application
-        self.current_viewer = None
 
-        self.setWindowTitle("FileFusion 1.0.0")
-        self.resize(1000, 700)
+        # Applicationが保持しているPluginManager
+        self.plugin_manager = (
+            application.plugin_manager
+        )
+
+        # Applicationが保持しているFileDetector
+        self.file_detector = (
+            application.detector
+        )
+
+        self.current_viewer = None
+        self.current_file = None
+
+        self.setWindowTitle("FileFusion")
+        self.resize(1200, 800)
 
         self._build_ui()
 
     def _build_ui(self):
-        central = QWidget()
-        self.setCentralWidget(central)
+        """UIを構築します。"""
 
-        root = QVBoxLayout(central)
-        root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(0)
-
-        toolbar = QFrame()
-        toolbar.setFrameShape(QFrame.StyledPanel)
-
-        toolbar_layout = QHBoxLayout(toolbar)
-
-        open_button = QPushButton("📂 開く")
-        open_button.clicked.connect(self.open_dialog)
-
-        plugins_button = QPushButton("🔌 プラグイン")
-        plugins_button.clicked.connect(self.show_plugins)
-
-        toolbar_layout.addWidget(open_button)
-        toolbar_layout.addWidget(plugins_button)
-        toolbar_layout.addStretch()
-
-        self.status_label = QLabel("FileFusion v1.0.0")
-
-        toolbar_layout.addWidget(self.status_label)
-
-        root.addWidget(toolbar)
-
-        self.viewer_container = QWidget()
-        self.viewer_layout = QVBoxLayout(
-            self.viewer_container
+        central_widget = QWidget()
+        self.setCentralWidget(
+            central_widget
         )
 
-        self.viewer_layout.setContentsMargins(
-            0,
-            0,
-            0,
-            0,
+        main_layout = QVBoxLayout(
+            central_widget
         )
 
-        root.addWidget(
-            self.viewer_container,
+        # ==========================================================
+        # ツールバー
+        # ==========================================================
+
+        toolbar = QHBoxLayout()
+
+        self.open_button = QPushButton(
+            "📂 ファイルを開く"
+        )
+
+        self.open_button.clicked.connect(
+            self.open_file_dialog
+        )
+
+        toolbar.addWidget(
+            self.open_button
+        )
+
+        self.plugin_button = QPushButton(
+            "🔌 プラグイン"
+        )
+
+        self.plugin_button.clicked.connect(
+            self.show_plugins
+        )
+
+        toolbar.addWidget(
+            self.plugin_button
+        )
+
+        toolbar.addStretch()
+
+        self.file_label = QLabel(
+            "ファイルが開かれていません"
+        )
+
+        self.file_label.setAlignment(
+            Qt.AlignRight
+            | Qt.AlignVCenter
+        )
+
+        toolbar.addWidget(
+            self.file_label
+        )
+
+        main_layout.addLayout(
+            toolbar
+        )
+
+        # ==========================================================
+        # Viewer領域
+        # ==========================================================
+
+        self.viewer_stack = QStackedWidget()
+
+        main_layout.addWidget(
+            self.viewer_stack,
             1,
         )
 
-        self.show_welcome()
+        # ==========================================================
+        # ホーム画面
+        # ==========================================================
 
-    def show_welcome(self):
-        self._clear_viewer()
-
-        label = QLabel(
-            "Open\n\n"
-            "ファイルを開いてください。\n\n"
-            "プラグイン方式で、さまざまな形式に対応できます。"
+        self.home_widget = (
+            self._create_home_widget()
         )
 
-        label.setAlignment(Qt.AlignCenter)
-
-        label.setStyleSheet(
-            "font-size: 20px; padding: 40px;"
+        self.viewer_stack.addWidget(
+            self.home_widget
         )
 
-        self.viewer_layout.addWidget(label)
-
-    def _clear_viewer(self):
-        if self.current_viewer is not None:
-            self.current_viewer.deleteLater()
-            self.current_viewer = None
-
-        while self.viewer_layout.count():
-            item = self.viewer_layout.takeAt(0)
-
-            widget = item.widget()
-
-            if widget is not None:
-                widget.deleteLater()
-
-    def open_dialog(self):
-        path, _ = QFileDialog.getOpenFileName(
-            self,
-            "ファイルを開く",
-            "",
-            "すべてのファイル (*.*)",
+        self.viewer_stack.setCurrentWidget(
+            self.home_widget
         )
 
-        if path:
-            self.application.open_file(path)
+    def _create_home_widget(self):
+        """ホーム画面を作成します。"""
 
-    def show_file(self, file_info):
-        self._clear_viewer()
+        widget = QWidget()
 
-        if not file_info.exists:
-            self.status_label.setText(
-                "ファイルが存在しません"
+        layout = QVBoxLayout(
+            widget
+        )
+
+        layout.setAlignment(
+            Qt.AlignCenter
+        )
+
+        title = QLabel(
+            "📂 FileFusion"
+        )
+
+        title.setAlignment(
+            Qt.AlignCenter
+        )
+
+        title.setStyleSheet(
+            "font-size: 32px;"
+            "font-weight: bold;"
+        )
+
+        layout.addWidget(
+            title
+        )
+
+        description = QLabel(
+            "いろいろなファイルを"
+            "プラグインで開けるアプリです。"
+        )
+
+        description.setAlignment(
+            Qt.AlignCenter
+        )
+
+        description.setStyleSheet(
+            "font-size: 16px;"
+            "margin-top: 10px;"
+        )
+
+        layout.addWidget(
+            description
+        )
+
+        open_button = QPushButton(
+            "📂 ファイルを開く"
+        )
+
+        open_button.setMinimumWidth(
+            220
+        )
+
+        open_button.setMinimumHeight(
+            45
+        )
+
+        open_button.clicked.connect(
+            self.open_file_dialog
+        )
+
+        layout.addWidget(
+            open_button,
+            alignment=Qt.AlignCenter,
+        )
+
+        return widget
+
+    def open_file_dialog(self):
+        """ファイル選択ダイアログを開きます。"""
+
+        path, _ = (
+            QFileDialog.getOpenFileName(
+                self,
+                "ファイルを開く",
+                "",
+                "すべてのファイル (*.*)",
             )
+        )
 
-            self.show_welcome()
+        if not path:
             return
 
-        plugin = self.application.plugin_manager.find_plugin(
-            file_info
+        self.open_file(
+            Path(path)
         )
+
+    def open_file(self, path):
+        """指定されたファイルを開きます。"""
+
+        path = Path(path)
+
+        if not path.exists():
+            QMessageBox.warning(
+                self,
+                "ファイルがありません",
+                f"ファイルが見つかりません。\n\n"
+                f"{path}",
+            )
+
+            return
+
+        if not path.is_file():
+            QMessageBox.warning(
+                self,
+                "ファイルではありません",
+                f"指定されたパスはファイルではありません。\n\n"
+                f"{path}",
+            )
+
+            return
+
+        # ==========================================================
+        # FileInfoを作成
+        # ==========================================================
+
+        try:
+            file_info = (
+                self.file_detector.detect(
+                    path
+                )
+            )
+
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "ファイル検出エラー",
+                "ファイル情報を取得できませんでした。\n\n"
+                f"{type(exc).__name__}: {exc}",
+            )
+
+            return
+
+        # ==========================================================
+        # 対応プラグインを探す
+        # ==========================================================
+
+        plugin = (
+            self.plugin_manager.find_plugin(
+                file_info
+            )
+        )
+
+        # ==========================================================
+        # Viewerを作成
+        # ==========================================================
 
         if plugin is None:
             viewer = UnsupportedViewer(
                 file_info,
-                self.viewer_container,
+                self,
             )
 
-            self.current_viewer = viewer
+        else:
+            try:
+                viewer = (
+                    plugin.create_viewer(
+                        file_info,
+                        self,
+                    )
+                )
 
-            self.viewer_layout.addWidget(viewer)
+            except Exception as exc:
+                QMessageBox.critical(
+                    self,
+                    "ファイルを開けません",
+                    "プラグインによるファイルの表示に失敗しました。\n\n"
+                    f"プラグイン: {plugin.name}\n"
+                    f"ファイル: {file_info.name}\n\n"
+                    f"{type(exc).__name__}: {exc}",
+                )
 
-            self.status_label.setText(
-                f"未対応: {file_info.name}"
+                return
+
+        # ==========================================================
+        # ★重要★
+        #
+        # 以前のViewerを完全に取り外す
+        # ==========================================================
+
+        old_viewer = (
+            self.current_viewer
+        )
+
+        if old_viewer is not None:
+
+            try:
+                self.viewer_stack.removeWidget(
+                    old_viewer
+                )
+            except Exception:
+                pass
+
+            try:
+                old_viewer.close()
+            except Exception:
+                pass
+
+            old_viewer.deleteLater()
+
+            self.current_viewer = None
+
+        # ==========================================================
+        # 新しいViewerを追加
+        # ==========================================================
+
+        self.current_viewer = viewer
+
+        self.current_file = path
+
+        self.viewer_stack.addWidget(
+            viewer
+        )
+
+        # ホーム画面ではなく、
+        # 今開いたViewerを表示
+        self.viewer_stack.setCurrentWidget(
+            viewer
+        )
+
+        # ==========================================================
+        # ウィンドウ表示を更新
+        # ==========================================================
+
+        self.file_label.setText(
+            f"📄 {path.name}"
+        )
+
+        self.setWindowTitle(
+            f"FileFusion - {path.name}"
+        )
+
+    def show_file(self, file_info):
+        """
+        FileFusionApplicationから
+        ファイルを開く場合にも対応します。
+        """
+
+        self.open_file(
+            file_info.path
+        )
+
+    def show_plugins(self):
+        """インストールされているプラグインを表示します。"""
+
+        plugins = (
+            self.plugin_manager.all_plugins()
+        )
+
+        if not plugins:
+            QMessageBox.information(
+                self,
+                "プラグイン",
+                "プラグインが見つかりません。",
             )
 
             return
 
-        try:
-            viewer = plugin.create_viewer(
-                file_info,
-                self.viewer_container,
-            )
-
-            if viewer is None:
-                raise RuntimeError(
-                    "プラグインがViewerを返しませんでした。"
-                )
-
-            self.current_viewer = viewer
-
-            self.viewer_layout.addWidget(viewer)
-
-            self.status_label.setText(
-                f"{plugin.name} | {file_info.name}"
-            )
-
-        except Exception as exc:
-            label = QLabel(
-                "ファイルを開けませんでした。\n\n"
-                f"{exc}"
-            )
-
-            label.setAlignment(Qt.AlignCenter)
-            label.setWordWrap(True)
-
-            self.current_viewer = label
-
-            self.viewer_layout.addWidget(label)
-
-            self.status_label.setText(
-                "読み込みエラー"
-            )
-
-    def show_plugins(self):
-        self._clear_viewer()
-
-        plugins = (
-            self.application
-            .plugin_manager
-            .all_plugins()
-        )
-
-        layout = QVBoxLayout()
-
-        title = QLabel("🔌 インストール済みプラグイン")
-        title.setStyleSheet(
-            "font-size: 22px; font-weight: bold;"
-        )
-
-        layout.addWidget(title)
+        lines = []
 
         for plugin in plugins:
             extensions = ", ".join(
                 plugin.extensions
             )
 
-            label = QLabel(
-                f"{plugin.name}  v{plugin.version}\n"
-                f"{plugin.description}\n"
-                f"対応: {extensions}"
+            lines.append(
+                f"🔌 {plugin.name}"
+                f"  v{plugin.version}\n"
+                f"   {plugin.description}\n"
+                f"   対応: {extensions}"
             )
 
-            label.setWordWrap(True)
-
-            label.setStyleSheet(
-                "padding: 15px;"
-                "border-bottom: 1px solid #cccccc;"
-            )
-
-            layout.addWidget(label)
-
-        layout.addStretch()
-
-        container = QWidget()
-        container.setLayout(layout)
-
-        self.current_viewer = container
-
-        self.viewer_layout.addWidget(container)
-
-        self.status_label.setText(
-            f"プラグイン数: {len(plugins)}"
+        QMessageBox.information(
+            self,
+            "🔌 インストール済みプラグイン",
+            "\n\n".join(lines),
         )
+
+    def closeEvent(self, event):
+        """ウィンドウ終了時の処理。"""
+
+        if self.current_viewer is not None:
+
+            try:
+                self.current_viewer.close()
+            except Exception:
+                pass
+
+        event.accept()
