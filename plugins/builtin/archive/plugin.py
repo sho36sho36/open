@@ -1,23 +1,28 @@
 from core.plugin import FilePlugin
 
-from plugins.builtin.archive.archive_viewer import (
-    ArchiveViewer,
-)
+from .archive_viewer import ArchiveViewer
 
 
 class ArchivePlugin(FilePlugin):
-    """圧縮ファイルに対応する共通プラグイン。"""
+    """圧縮・アーカイブファイルを表示するプラグイン。"""
 
     name = "Archive Plugin"
-    version = "1.6.0"
+    version = "2.0.1"
 
     description = (
-        "ZIP圧縮ファイルを開き、"
-        "内容を表示・展開する共通アーカイブプラグインです。"
+        "ZIP / 7Z / TAR / GZ / BZ2 / XZ / RAR / CAB "
+        "などの圧縮・アーカイブファイルを表示します。"
     )
 
     extensions = [
         ".zip",
+        ".7z",
+        ".tar",
+        ".gz",
+        ".bz2",
+        ".xz",
+        ".rar",
+        ".cab",
     ]
 
     def create_viewer(
@@ -27,5 +32,5 @@ class ArchivePlugin(FilePlugin):
     ):
         return ArchiveViewer(
             file_info,
-            parent,
+            parent=parent,
         )

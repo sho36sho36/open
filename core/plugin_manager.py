@@ -1,5 +1,6 @@
 import importlib.util
 import inspect
+import sys
 from pathlib import Path
 
 from .exceptions import PluginLoadError
@@ -7,7 +8,7 @@ from .plugin import FilePlugin
 
 
 class PluginManager:
-    """FileFusionプラグインを管理します。"""
+    """openプラグインを管理します。"""
 
     PLUGIN_ENTRY_FILE = "plugin.py"
 
@@ -27,7 +28,6 @@ class PluginManager:
                 "FilePluginを継承したプラグインのみ登録できます。"
             )
 
-        # 同じプラグインクラスの重複登録を防止
         for existing in self.plugins:
             if type(existing) is type(plugin):
                 return existing
@@ -41,17 +41,7 @@ class PluginManager:
         プラグインを検索します。
 
         各プラグインディレクトリの中にある
-        plugin.pyだけをエントリーポイントとして読み込みます。
-
-        これにより、
-
-            plugin.py
-            midi_parser.py
-            midi_player.py
-            midi_viewer.py
-
-        のような複数ファイル構成のプラグインを
-        安全に扱えます。
+        plugin.pyをエントリーポイントとして読み込みます。
         """
 
         for directory in self.plugin_directories:
@@ -64,9 +54,7 @@ class PluginManager:
             self._discover_directory(directory)
 
     def _discover_directory(self, directory):
-        """
-        ディレクトリ以下からplugin.pyを検索します。
-        """
+        """ディレクトリ以下からplugin.pyを検索します。"""
 
         for entry_file in directory.rglob(
             self.PLUGIN_ENTRY_FILE
@@ -77,17 +65,34 @@ class PluginManager:
             self._load_file(entry_file)
 
     def _load_file(self, file):
-        """plugin.pyからプラグインを読み込みます。"""
+        """
+        plugin.pyからプラグインを読み込みます。
 
-        module_name = self._create_module_name(
-            file
-        )
+        プラグインディレクトリを一時的にsys.pathへ追加することで、
+        plugin.pyから相対ファイルを扱いやすくします。
+        """
+
+        file = Path(file).resolve()
+
+        plugin_directory = file.parent
+        base_directory = plugin_directory.parent
+
+        module_name = self._create_module_name(file)
 
         try:
+            if str(base_directory) not in sys.path:
+                sys.path.insert(
+                    0,
+                    str(base_directory),
+                )
+
             spec = (
                 importlib.util.spec_from_file_location(
                     module_name,
                     file,
+                    submodule_search_locations=[
+                        str(plugin_directory)
+                    ],
                 )
             )
 
@@ -105,9 +110,7 @@ class PluginManager:
                 )
             )
 
-            # sys.modulesへ登録することで、
-            # プラグイン内部のimportを安定させる。
-            import sys
+            module.__package__ = plugin_directory.name
 
             sys.modules[module_name] = module
 
@@ -127,9 +130,7 @@ class PluginManager:
 
     @staticmethod
     def _create_module_name(file):
-        """
-        ファイルパスから安全なモジュール名を作ります。
-        """
+        """ファイルパスから安全なモジュール名を作ります。"""
 
         parts = file.with_suffix("").parts
 
@@ -148,7 +149,7 @@ class PluginManager:
             )
 
         return (
-            "filefusion_plugin_"
+            "open_plugin_"
             + "_".join(safe_parts)
         )
 
@@ -170,13 +171,13 @@ class PluginManager:
                 self.register(obj())
 
     def initialize_all(self):
-        """全プラグインを初期化します。"""
+        """すべてのプラグインを初期化します。"""
 
         for plugin in self.plugins:
             plugin.initialize()
 
     def shutdown_all(self):
-        """全プラグインを終了します。"""
+        """すべてのプラグインを終了します。"""
 
         for plugin in reversed(
             self.plugins
@@ -184,7 +185,7 @@ class PluginManager:
             plugin.shutdown()
 
     def find_plugin(self, file_info):
-        """ファイルを開けるプラグインを探します。"""
+        """ファイルに対応する最初のプラグインを取得します。"""
 
         for plugin in self.plugins:
             if plugin.can_open(file_info):
@@ -193,7 +194,7 @@ class PluginManager:
         return None
 
     def find_plugins(self, file_info):
-        """ファイルを開ける全プラグインを返します。"""
+        """ファイルに対応するすべてのプラグインを取得します。"""
 
         return [
             plugin
@@ -202,6 +203,6 @@ class PluginManager:
         ]
 
     def all_plugins(self):
-        """登録済みプラグインを返します。"""
+        """登録済みプラグインをすべて取得します。"""
 
         return list(self.plugins)

@@ -1,80 +1,76 @@
-import mimetypes
+import bz2
+import gzip
+import lzma
+import shutil
+import tarfile
+import tempfile
 import zipfile
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QFileDialog,
     QHBoxLayout,
     QLabel,
     QMessageBox,
     QPushButton,
-    QSplitter,
-    QTableWidget,
-    QTableWidgetItem,
-    QTextEdit,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
+try:
+    import py7zr
+except ImportError:
+    py7zr = None
+
+try:
+    import rarfile
+except ImportError:
+    rarfile = None
+
 
 class ArchiveViewer(QWidget):
-    """ZIPファイル表示・展開用ビューア。"""
+    """圧縮・アーカイブファイル用ビューア。"""
 
     TEXT_EXTENSIONS = {
         ".txt",
         ".log",
         ".csv",
         ".tsv",
-        ".ini",
-        ".cfg",
-        ".conf",
-        ".md",
-        ".markdown",
         ".json",
+        ".jsonl",
+        ".ndjson",
         ".xml",
-        ".yaml",
-        ".yml",
-        ".toml",
-        ".py",
-        ".pyw",
-        ".js",
-        ".jsx",
-        ".ts",
-        ".tsx",
         ".html",
         ".htm",
         ".css",
-        ".scss",
-        ".sass",
-        ".less",
+        ".js",
+        ".ts",
+        ".py",
         ".java",
-        ".kt",
-        ".kts",
         ".c",
         ".h",
         ".cpp",
-        ".cc",
-        ".cxx",
         ".hpp",
         ".cs",
         ".go",
         ".rs",
-        ".swift",
-        ".dart",
-        ".lua",
         ".rb",
         ".php",
-        ".sql",
-        ".sh",
-        ".bash",
-        ".zsh",
+        ".md",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".ini",
+        ".cfg",
+        ".conf",
         ".bat",
         ".cmd",
         ".ps1",
+        ".sh",
     }
 
     IMAGE_EXTENSIONS = {
@@ -84,724 +80,562 @@ class ArchiveViewer(QWidget):
         ".gif",
         ".bmp",
         ".webp",
-        ".tiff",
         ".tif",
+        ".tiff",
         ".ico",
     }
 
-    def __init__(
-        self,
-        file_info,
-        parent=None,
-    ):
+    def __init__(self, file_info, parent=None):
         super().__init__(parent)
 
         self.file_info = file_info
-        self.file_path = Path(
-            file_info.path
-        )
+        self.archive_path = Path(file_info.path)
 
-        self.archive = None
-        self.entries = []
-
-        self.setWindowTitle(
-            f"{file_info.name} - open"
-        )
+        self.setObjectName("ArchiveViewer")
 
         self._build_ui()
-        self._open_archive()
+        self._load_archive()
+
+    # ---------------------------------------------------------
+    # UI
+    # ---------------------------------------------------------
 
     def _build_ui(self):
-        self.info_label = QLabel(
-            self
+        layout = QVBoxLayout(self)
+
+        header = QHBoxLayout()
+
+        self.title_label = QLabel(
+            f"📦 {self.archive_path.name}"
         )
 
-        self.info_label.setText(
-            "ZIPファイルを読み込んでいます..."
+        self.type_label = QLabel(
+            self.archive_path.suffix.lower()
+        )
+
+        self.status_label = QLabel(
+            "読み込み中..."
+        )
+
+        self.reload_button = QPushButton(
+            "再読み込み"
         )
 
         self.extract_button = QPushButton(
-            "📦 すべて展開",
-            self,
+            "すべて展開"
         )
 
-        self.extract_button.clicked.connect(
-            self._extract_all
+        header.addWidget(
+            self.title_label
         )
 
-        self.extract_selected_button = QPushButton(
-            "📄 選択項目を展開",
-            self,
+        header.addWidget(
+            self.type_label
         )
 
-        self.extract_selected_button.clicked.connect(
-            self._extract_selected
+        header.addStretch()
+
+        header.addWidget(
+            self.status_label
         )
 
-        self.refresh_button = QPushButton(
-            "🔄 更新",
-            self,
+        header.addWidget(
+            self.reload_button
         )
 
-        self.refresh_button.clicked.connect(
-            self._refresh
-        )
-
-        top_layout = QHBoxLayout()
-
-        top_layout.addWidget(
-            self.info_label,
-            1,
-        )
-
-        top_layout.addWidget(
-            self.extract_selected_button
-        )
-
-        top_layout.addWidget(
+        header.addWidget(
             self.extract_button
         )
 
-        top_layout.addWidget(
-            self.refresh_button
-        )
+        layout.addLayout(header)
 
-        self.tree = QTreeWidget(
-            self
-        )
+        self.tree = QTreeWidget()
 
         self.tree.setHeaderLabels(
             [
                 "名前",
                 "種類",
                 "サイズ",
-                "圧縮後",
             ]
         )
 
-        self.tree.setColumnWidth(
-            0,
-            320,
+        self.tree.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection
         )
 
-        self.tree.itemSelectionChanged.connect(
-            self._selection_changed
-        )
-
-        self.preview = QTextEdit(
-            self
-        )
-
-        self.preview.setReadOnly(
-            True
-        )
-
-        self.preview.setPlaceholderText(
-            "ファイルを選択すると詳細を表示します。"
-        )
-
-        self.preview_image = QLabel(
-            self
-        )
-
-        self.preview_image.setAlignment(
-            Qt.AlignCenter
-        )
-
-        self.preview_image.setMinimumSize(
-            200,
-            200,
-        )
-
-        self.preview_image.setText(
-            "画像を選択するとここに表示されます。"
-        )
-
-        self.preview_image.setWordWrap(
-            True
-        )
-
-        self.preview_stack = QWidget(
-            self
-        )
-
-        preview_layout = QVBoxLayout(
-            self.preview_stack
-        )
-
-        preview_layout.setContentsMargins(
-            0,
-            0,
-            0,
-            0,
-        )
-
-        preview_layout.addWidget(
-            self.preview
-        )
-
-        preview_layout.addWidget(
-            self.preview_image
-        )
-
-        self.preview_image.hide()
-
-        splitter = QSplitter(
-            Qt.Horizontal,
-            self,
-        )
-
-        splitter.addWidget(
-            self.tree
-        )
-
-        splitter.addWidget(
-            self.preview_stack
-        )
-
-        splitter.setStretchFactor(
-            0,
-            2,
-        )
-
-        splitter.setStretchFactor(
-            1,
-            3,
-        )
-
-        layout = QVBoxLayout(
-            self
-        )
-
-        layout.addLayout(
-            top_layout
+        self.tree.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows
         )
 
         layout.addWidget(
-            splitter,
-            1,
+            self.tree
         )
 
-    def _open_archive(self):
-        try:
-            self.archive = zipfile.ZipFile(
-                self.file_path,
-                "r",
-            )
-
-            self.entries = (
-                self.archive.infolist()
-            )
-
-        except Exception as exc:
-            self.info_label.setText(
-                "ZIPファイルを開けませんでした。"
-            )
-
-            QMessageBox.critical(
-                self,
-                "open",
-                "ZIPファイルを開けませんでした。\n\n"
-                f"{exc}",
-            )
-
-            self.extract_button.setEnabled(
-                False
-            )
-
-            self.extract_selected_button.setEnabled(
-                False
-            )
-
-            return
-
-        file_count = sum(
-            not entry.is_dir()
-            for entry in self.entries
+        self.reload_button.clicked.connect(
+            self._reload
         )
 
-        directory_count = sum(
-            entry.is_dir()
-            for entry in self.entries
+        self.extract_button.clicked.connect(
+            self._extract_all
         )
 
-        total_size = sum(
-            entry.file_size
-            for entry in self.entries
-            if not entry.is_dir()
-        )
+    # ---------------------------------------------------------
+    # Archive loading
+    # ---------------------------------------------------------
 
-        self.info_label.setText(
-            f"{self.file_info.name}"
-            f"  |  {file_count} ファイル"
-            f"  |  {directory_count} フォルダ"
-            f"  |  {self._format_size(total_size)}"
-        )
-
-        self._build_tree()
-
-    def _build_tree(self):
+    def _load_archive(self):
         self.tree.clear()
 
-        root = self.tree.invisibleRootItem()
+        try:
+            suffix = self.archive_path.suffix.lower()
 
-        directory_items = {
-            "": root,
-        }
+            if suffix == ".zip":
+                self._load_zip()
 
-        for entry in self.entries:
-            path = entry.filename.replace(
-                "\\",
-                "/",
-            ).strip("/")
+            elif suffix == ".7z":
+                self._load_7z()
 
-            if not path:
-                continue
+            elif suffix == ".tar":
+                self._load_tar()
 
-            parts = [
-                part
-                for part in path.split("/")
-                if part
-            ]
-
-            current_path = ""
-
-            parent_item = root
-
-            for index, part in enumerate(
-                parts
-            ):
-                current_path = (
-                    f"{current_path}/{part}"
-                    if current_path
-                    else part
+            elif suffix == ".gz":
+                self._load_single_compressed(
+                    gzip.open
                 )
 
-                is_last = (
-                    index
-                    == len(parts) - 1
+            elif suffix == ".bz2":
+                self._load_single_compressed(
+                    bz2.open
                 )
 
-                if (
-                    not is_last
-                    or entry.is_dir()
-                ):
-                    if (
-                        current_path
-                        not in directory_items
-                    ):
-                        item = QTreeWidgetItem(
-                            parent_item
-                        )
-
-                        item.setText(
-                            0,
-                            part,
-                        )
-
-                        item.setText(
-                            1,
-                            "フォルダ",
-                        )
-
-                        item.setData(
-                            0,
-                            Qt.UserRole,
-                            current_path,
-                        )
-
-                        directory_items[
-                            current_path
-                        ] = item
-
-                    parent_item = (
-                        directory_items[
-                            current_path
-                        ]
-                    )
-
-                    continue
-
-                item = QTreeWidgetItem(
-                    parent_item
+            elif suffix == ".xz":
+                self._load_single_compressed(
+                    lzma.open
                 )
 
-                item.setText(
-                    0,
-                    part,
+            elif suffix == ".rar":
+                self._load_rar()
+
+            elif suffix == ".cab":
+                self._show_error(
+                    "CAB形式は現在の環境では"
+                    "直接読み込めません。"
                 )
 
-                item.setText(
-                    1,
-                    "ファイル",
+            else:
+                self._show_error(
+                    "対応していないアーカイブ形式です。"
                 )
 
-                item.setText(
-                    2,
-                    self._format_size(
-                        entry.file_size
-                    ),
+        except Exception as exc:
+            self._show_error(
+                f"アーカイブを読み込めませんでした。\n\n"
+                f"{exc}"
+            )
+
+    # ---------------------------------------------------------
+    # ZIP
+    # ---------------------------------------------------------
+
+    def _load_zip(self):
+        with zipfile.ZipFile(
+            self.archive_path,
+            "r",
+        ) as archive:
+
+            for info in archive.infolist():
+                self._add_entry(
+                    info.filename,
+                    info.file_size,
+                    info.is_dir(),
                 )
 
-                item.setText(
-                    3,
-                    self._format_size(
-                        entry.compress_size
-                    ),
-                )
+            self.status_label.setText(
+                f"{len(archive.infolist())} 件"
+            )
 
-                item.setData(
-                    0,
-                    Qt.UserRole,
-                    entry.filename,
-                )
+    # ---------------------------------------------------------
+    # 7Z
+    # ---------------------------------------------------------
 
-        self.tree.expandToDepth(
-            0
-        )
-
-    def _find_entry(self, filename):
-        if self.archive is None:
-            return None
-
-        for entry in self.entries:
-            if entry.filename == filename:
-                return entry
-
-        return None
-
-    def _selection_changed(self):
-        items = self.tree.selectedItems()
-
-        if not items:
+    def _load_7z(self):
+        if py7zr is None:
+            self._show_error(
+                "7Z形式を開くには py7zr が必要です。\n\n"
+                "requirements.txt の依存関係をインストールしてください。"
+            )
             return
 
-        item = items[0]
+        with py7zr.SevenZipFile(
+            self.archive_path,
+            mode="r",
+        ) as archive:
 
-        filename = item.data(
+            names = archive.getnames()
+
+            for name in names:
+                self._add_entry(
+                    name,
+                    0,
+                    name.endswith("/"),
+                )
+
+            self.status_label.setText(
+                f"{len(names)} 件"
+            )
+
+    # ---------------------------------------------------------
+    # TAR
+    # ---------------------------------------------------------
+
+    def _load_tar(self):
+        with tarfile.open(
+            self.archive_path,
+            mode="r:*",
+        ) as archive:
+
+            members = archive.getmembers()
+
+            for member in members:
+                self._add_entry(
+                    member.name,
+                    member.size,
+                    member.isdir(),
+                )
+
+            self.status_label.setText(
+                f"{len(members)} 件"
+            )
+
+    # ---------------------------------------------------------
+    # GZ / BZ2 / XZ
+    # ---------------------------------------------------------
+
+    def _load_single_compressed(
+        self,
+        opener,
+    ):
+        size = self.archive_path.stat().st_size
+
+        self._add_entry(
+            self.archive_path.stem,
+            size,
+            False,
+        )
+
+        self.status_label.setText(
+            "単一ファイル圧縮"
+        )
+
+    # ---------------------------------------------------------
+    # RAR
+    # ---------------------------------------------------------
+
+    def _load_rar(self):
+        if rarfile is None:
+            self._show_error(
+                "RAR形式を開くには rarfile が必要です。\n\n"
+                "requirements.txt の依存関係をインストールしてください。"
+            )
+            return
+
+        with rarfile.RarFile(
+            self.archive_path,
+            "r",
+        ) as archive:
+
+            infos = archive.infolist()
+
+            for info in infos:
+                self._add_entry(
+                    info.filename,
+                    info.file_size,
+                    info.isdir(),
+                )
+
+            self.status_label.setText(
+                f"{len(infos)} 件"
+            )
+
+    # ---------------------------------------------------------
+    # Tree
+    # ---------------------------------------------------------
+
+    def _add_entry(
+        self,
+        name,
+        size,
+        is_directory,
+    ):
+        item = QTreeWidgetItem()
+
+        item.setText(
             0,
-            Qt.UserRole,
+            name,
         )
 
-        if not filename:
-            self._show_text(
-                "フォルダ\n\n"
-                f"{item.text(0)}"
+        if is_directory:
+            item.setText(
+                1,
+                "フォルダー",
             )
 
-            return
-
-        entry = self._find_entry(
-            filename
-        )
-
-        if entry is None:
-            return
-
-        if entry.is_dir():
-            return
-
-        self._preview_entry(
-            entry
-        )
-
-    def _preview_entry(self, entry):
-        suffix = Path(
-            entry.filename
-        ).suffix.lower()
-
-        if suffix in self.IMAGE_EXTENSIONS:
-            self._show_image(
-                entry
+        else:
+            item.setText(
+                1,
+                self._detect_type(name),
             )
-            return
+
+        item.setText(
+            2,
+            self._format_size(size),
+        )
+
+        if is_directory:
+            item.setData(
+                0,
+                Qt.ItemDataRole.UserRole,
+                "directory",
+            )
+        else:
+            item.setData(
+                0,
+                Qt.ItemDataRole.UserRole,
+                "file",
+            )
+
+        self.tree.addTopLevelItem(
+            item
+        )
+
+    # ---------------------------------------------------------
+    # Type
+    # ---------------------------------------------------------
+
+    def _detect_type(self, name):
+        suffix = Path(name).suffix.lower()
 
         if suffix in self.TEXT_EXTENSIONS:
-            self._show_text_file(
-                entry
-            )
-            return
+            return "テキスト"
 
-        self.preview_image.hide()
-        self.preview.show()
+        if suffix in self.IMAGE_EXTENSIONS:
+            return "画像"
 
-        compression = (
-            "保存"
-            if entry.compress_type
-            == zipfile.ZIP_STORED
-            else "圧縮"
-        )
+        if suffix in {
+            ".zip",
+            ".7z",
+            ".tar",
+            ".gz",
+            ".bz2",
+            ".xz",
+            ".rar",
+            ".cab",
+        }:
+            return "アーカイブ"
 
-        text = (
-            f"ファイル名: {entry.filename}\n\n"
-            f"種類: {self._file_type(entry)}\n"
-            f"サイズ: {self._format_size(entry.file_size)}\n"
-            f"圧縮後: "
-            f"{self._format_size(entry.compress_size)}\n"
-            f"方式: {compression}\n"
-            f"CRC32: "
-            f"{entry.CRC:08X}\n"
-            f"更新日時: "
-            f"{entry.date_time[0]:04d}/"
-            f"{entry.date_time[1]:02d}/"
-            f"{entry.date_time[2]:02d} "
-            f"{entry.date_time[3]:02d}:"
-            f"{entry.date_time[4]:02d}:"
-            f"{entry.date_time[5]:02d}\n"
-        )
+        return "ファイル"
 
-        self._show_text(
-            text
-        )
-
-    def _show_text_file(self, entry):
-        try:
-            data = self.archive.read(
-                entry
-            )
-
-            text = data.decode(
-                "utf-8"
-            )
-
-        except UnicodeDecodeError:
-            try:
-                text = data.decode(
-                    "shift_jis"
-                )
-            except UnicodeDecodeError:
-                self._show_text(
-                    "このファイルはテキストとして"
-                    "表示できません。\n\n"
-                    f"{entry.filename}"
-                )
-                return
-
-        except Exception as exc:
-            self._show_text(
-                "ファイルを読み込めませんでした。\n\n"
-                f"{exc}"
-            )
-            return
-
-        self._show_text(
-            text
-        )
-
-    def _show_image(self, entry):
-        try:
-            data = self.archive.read(
-                entry
-            )
-
-            pixmap = QPixmap()
-
-            if not pixmap.loadFromData(
-                data
-            ):
-                raise ValueError(
-                    "画像として読み込めません。"
-                )
-
-            self.preview.hide()
-            self.preview_image.show()
-
-            self.preview_image.setPixmap(
-                pixmap
-            )
-
-            self.preview_image.setScaledContents(
-                False
-            )
-
-        except Exception as exc:
-            self._show_text(
-                "画像を表示できませんでした。\n\n"
-                f"{exc}"
-            )
-
-    def _show_text(self, text):
-        self.preview_image.hide()
-        self.preview.show()
-
-        self.preview.setPlainText(
-            text
-        )
+    # ---------------------------------------------------------
+    # Extraction
+    # ---------------------------------------------------------
 
     def _extract_all(self):
-        if self.archive is None:
-            return
-
-        directory = QFileDialog.getExistingDirectory(
+        destination = QFileDialog.getExistingDirectory(
             self,
             "展開先を選択",
         )
 
-        if not directory:
+        if not destination:
             return
+
+        destination = Path(destination)
 
         try:
-            self.archive.extractall(
-                directory
-            )
+            suffix = self.archive_path.suffix.lower()
 
-        except Exception as exc:
-            QMessageBox.critical(
-                self,
-                "open",
-                "展開に失敗しました。\n\n"
-                f"{exc}",
-            )
-            return
-
-        QMessageBox.information(
-            self,
-            "open",
-            "ZIPファイルを展開しました。",
-        )
-
-    def _extract_selected(self):
-        if self.archive is None:
-            return
-
-        items = self.tree.selectedItems()
-
-        if not items:
-            QMessageBox.information(
-                self,
-                "open",
-                "展開するファイルを選択してください。",
-            )
-            return
-
-        item = items[0]
-
-        filename = item.data(
-            0,
-            Qt.UserRole,
-        )
-
-        if not filename:
-            QMessageBox.information(
-                self,
-                "open",
-                "ファイルを選択してください。",
-            )
-            return
-
-        entry = self._find_entry(
-            filename
-        )
-
-        if entry is None or entry.is_dir():
-            return
-
-        directory = QFileDialog.getExistingDirectory(
-            self,
-            "展開先を選択",
-        )
-
-        if not directory:
-            return
-
-        try:
-            target = Path(
-                directory
-            )
-
-            target_path = (
-                target
-                / Path(filename)
-            )
-
-            target_path.parent.mkdir(
-                parents=True,
-                exist_ok=True,
-            )
-
-            with self.archive.open(
-                entry,
-                "r",
-            ) as source:
-                target_path.write_bytes(
-                    source.read()
+            if suffix == ".zip":
+                self._extract_zip(
+                    destination
                 )
 
-        except Exception as exc:
-            QMessageBox.critical(
+            elif suffix == ".7z":
+                self._extract_7z(
+                    destination
+                )
+
+            elif suffix == ".tar":
+                self._extract_tar(
+                    destination
+                )
+
+            elif suffix == ".gz":
+                self._extract_single(
+                    gzip.open,
+                    destination,
+                )
+
+            elif suffix == ".bz2":
+                self._extract_single(
+                    bz2.open,
+                    destination,
+                )
+
+            elif suffix == ".xz":
+                self._extract_single(
+                    lzma.open,
+                    destination,
+                )
+
+            elif suffix == ".rar":
+                self._extract_rar(
+                    destination
+                )
+
+            elif suffix == ".cab":
+                raise RuntimeError(
+                    "CAB形式の展開には対応していません。"
+                )
+
+            QMessageBox.information(
                 self,
-                "open",
-                "ファイルの展開に失敗しました。\n\n"
-                f"{exc}",
+                "展開完了",
+                f"展開しました。\n\n{destination}",
             )
-            return
 
-        QMessageBox.information(
+        except Exception as exc:
+            self._show_error(
+                f"展開に失敗しました。\n\n{exc}"
+            )
+
+    def _extract_zip(
+        self,
+        destination,
+    ):
+        with zipfile.ZipFile(
+            self.archive_path,
+            "r",
+        ) as archive:
+
+            archive.extractall(
+                destination
+            )
+
+    def _extract_7z(
+        self,
+        destination,
+    ):
+        if py7zr is None:
+            raise RuntimeError(
+                "py7zr がインストールされていません。"
+            )
+
+        with py7zr.SevenZipFile(
+            self.archive_path,
+            mode="r",
+        ) as archive:
+
+            archive.extractall(
+                path=destination
+            )
+
+    def _extract_tar(
+        self,
+        destination,
+    ):
+        with tarfile.open(
+            self.archive_path,
+            mode="r:*",
+        ) as archive:
+
+            archive.extractall(
+                destination
+            )
+
+    def _extract_single(
+        self,
+        opener,
+        destination,
+    ):
+        output_name = self.archive_path.stem
+
+        output_path = (
+            destination
+            / output_name
+        )
+
+        with opener(
+            self.archive_path,
+            "rb",
+        ) as source:
+
+            with output_path.open(
+                "wb"
+            ) as target:
+
+                shutil.copyfileobj(
+                    source,
+                    target,
+                )
+
+    def _extract_rar(
+        self,
+        destination,
+    ):
+        if rarfile is None:
+            raise RuntimeError(
+                "rarfile がインストールされていません。"
+            )
+
+        with rarfile.RarFile(
+            self.archive_path,
+            "r",
+        ) as archive:
+
+            archive.extractall(
+                path=destination
+            )
+
+    # ---------------------------------------------------------
+    # Utility
+    # ---------------------------------------------------------
+
+    def _format_size(self, size):
+        if size is None:
+            return "-"
+
+        try:
+            size = int(size)
+        except (TypeError, ValueError):
+            return "-"
+
+        units = [
+            "B",
+            "KB",
+            "MB",
+            "GB",
+            "TB",
+        ]
+
+        value = float(size)
+
+        for unit in units:
+            if value < 1024:
+                return f"{value:.1f} {unit}"
+
+            value /= 1024
+
+        return f"{value:.1f} PB"
+
+    def _show_error(self, message):
+        self.status_label.setText(
+            "エラー"
+        )
+
+        QMessageBox.warning(
             self,
-            "open",
-            "ファイルを展開しました。",
+            "Archive Plugin",
+            message,
         )
 
-    def _refresh(self):
-        self.tree.clear()
-        self.preview.clear()
-
-        if self.archive is not None:
-            try:
-                self.archive.close()
-            except Exception:
-                pass
-
-            self.archive = None
-
-        self._open_archive()
-
-    @staticmethod
-    def _file_type(entry):
-        suffix = Path(
-            entry.filename
-        ).suffix.lower()
-
-        if suffix:
-            mime_type, _ = mimetypes.guess_type(
-                entry.filename
-            )
-
-            if mime_type:
-                return mime_type
-
-            return suffix
-
-        return "不明"
-
-    @staticmethod
-    def _format_size(size):
-        if size < 1024:
-            return f"{size} B"
-
-        if size < 1024 * 1024:
-            return (
-                f"{size / 1024:.1f} KB"
-            )
-
-        if size < 1024 * 1024 * 1024:
-            return (
-                f"{size / (1024 * 1024):.1f} MB"
-            )
-
-        return (
-            f"{size / (1024 * 1024 * 1024):.1f} GB"
-        )
-
-    def closeEvent(self, event):
-        if self.archive is not None:
-            try:
-                self.archive.close()
-            except Exception:
-                pass
-
-            self.archive = None
-
-        super().closeEvent(
-            event
-        )
+    def _reload(self):
+        self._load_archive()

@@ -1,9 +1,6 @@
 """
-open Archive Plugin
+Archive Plugin
+
+open v2.0.1
+圧縮・アーカイブファイル用プラグイン。
 """
-
-from .plugin import ArchivePlugin
-
-__all__ = [
-    "ArchivePlugin",
-]
