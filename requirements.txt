@@ -9,3 +9,6 @@ odfpy>=1.4,<2
 py7zr>=0.22,<2
 rarfile>=4.2,<5
 pyarrow>=18,<23
+trimesh>=4.4,<5
+pyvista>=0.44,<1
+pyvistaqt>=0.11,<1

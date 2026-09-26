@@ -11,7 +11,7 @@ from .file_info import FileInfo
 class FileFusionApplication:
     """openアプリケーション本体。"""
 
-    VERSION = "2.0.2"
+    VERSION = "2.1.0"
 
     def __init__(self):
         self.qt_app = QApplication(sys.argv)
