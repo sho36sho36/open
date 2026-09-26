@@ -21,6 +21,8 @@
 * 📦 圧縮ファイル表示・展開
 * 📊 Office / OpenDocument対応
 * 🗄️ データファイル表示
+* 🧊 3Dモデル表示
+* 🎨 デザイン・ベクターファイル表示
 * 🔌 外部プラグイン対応
 
 ---
@@ -306,6 +308,89 @@ Parquetデータを表形式で表示できます。
 
 ---
 
+# 🧊 3D
+
+v2.1.0で3Dモデルに対応しました。
+
+対応拡張子:
+
+```text
+.obj
+.stl
+.glb
+.gltf
+.ply
+.3ds
+.dae
+```
+
+## ✨ Features
+
+* 3Dモデル表示
+* マウスによる回転
+* ズーム
+* パン
+* カメラリセット
+* ワイヤーフレーム表示
+* 頂点表示
+* モデル情報表示
+* 再読み込み
+
+複数の3D形式を1つの3D Pluginで扱います。
+
+---
+
+# 🎨 Design / Vector
+
+v2.2.0でデザイン・ベクターファイルに対応しました。
+
+対応拡張子:
+
+```text
+.svg
+.eps
+.ai
+.psd
+.xcf
+.kra
+```
+
+## SVG
+
+SVGをベクター画像として表示します。
+
+## EPS
+
+対応環境ではEPSをプレビューできます。
+
+環境によっては外部レンダラーが必要になる場合があります。
+
+## AI
+
+Adobe Illustratorファイルに対応します。
+
+PDF互換データが含まれているAIファイルでは、そのデータを利用してプレビューできます。
+
+## PSD
+
+Photoshopファイルをプレビューできます。
+
+可能な場合はレイヤー情報も表示します。
+
+## XCF
+
+GIMPのXCFファイルを読み込みます。
+
+ファイル構造によってはプレビューできない場合があります。
+
+## KRA
+
+Kritaファイルからプレビュー画像を取得して表示します。
+
+可能な場合はレイヤー情報も表示します。
+
+---
+
 # 🧩 Plugin System
 
 openでは、ファイル形式ごとの機能をPluginとして分離しています。
@@ -356,7 +441,9 @@ open/
 │  │  ├─ pdf/
 │  │  ├─ archive/
 │  │  ├─ office/
-│  │  └─ data/
+│  │  ├─ data/
+│  │  ├─ 3d/
+│  │  └─ design/
 │  │
 │  └─ external/
 │
@@ -410,6 +497,10 @@ openは主に以下の技術を使用しています。
 * py7zr
 * rarfile
 * pyarrow
+* trimesh
+* PyVista
+* PyVistaQt
+* Pillow
 
 ---
 
@@ -461,18 +552,47 @@ py -m unittest discover
 
 # 📚 Version History
 
+## v2.2.0
+
+🎨 Design / Vector Pluginを追加。
+
+* SVG対応
+* EPS対応
+* AI対応
+* PSD対応
+* XCF対応
+* KRA対応
+* デザインファイルプレビュー
+* レイヤー情報表示
+* SVGベクター表示
+* AI PDF互換プレビュー
+
+## v2.1.0
+
+🧊 3D Pluginを追加。
+
+* OBJ
+* STL
+* GLB
+* glTF
+* PLY
+* 3DS
+* COLLADA
+
+に対応。
+
+3Dモデルの回転、ズーム、パン、ワイヤーフレーム表示、頂点表示などに対応しました。
+
 ## v2.0.2
 
 🗄️ Data Pluginを追加。
 
-* SQLite対応
-* Parquet対応
-* JSONL対応
-* NDJSON対応
-* 表形式Viewer
-* SQLiteテーブル選択
-* 読み取り専用表示
-* 大量データ向け読み込み上限
+* SQLite
+* Parquet
+* JSONL
+* NDJSON
+
+に対応。
 
 ## v2.0.1
 
