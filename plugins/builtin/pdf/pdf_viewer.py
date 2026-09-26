@@ -1,6 +1,6 @@
 from pathlib import Path
 
-import fitz
+import pymupdf
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import (
@@ -204,7 +204,7 @@ class PDFViewer(QWidget):
 
     def _open_document(self):
         try:
-            self.document = fitz.open(
+            self.document = pymupdf.open(
                 str(self.file_path)
             )
 
@@ -266,7 +266,7 @@ class PDFViewer(QWidget):
 
         scale = self.zoom / 100.0
 
-        matrix = fitz.Matrix(
+        matrix = pymupdf.Matrix(
             scale,
             scale,
         )
